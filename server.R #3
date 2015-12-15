@@ -1,0 +1,127 @@
+library(ggvis)
+library(dplyr)
+library(RCurl)
+
+'IVMF.Sep,Oct,Nov' <- getURL("http://docs.google.com/spreadsheets/d/1qM-4duFHdHFSADfg0CllPU9GPkLXhp1kqje_zojvUVA/pub?gid=0&single=true&output=csv")
+read.csv(textConnection('IVMF.Sep,Oct,Nov'))
+
+#Importdata
+mydata <- `IVMF.Sep,Oct,Nov`
+mydata <- 
+  select(Outlet.Publication, Circulation..Potential.Viewership, Country, Date, 
+         Hit.sentence, Circulation..Unique.Visitors, Headline, Keywords)
+#convert dates
+mydata$Date <- as.Date(mydata$Date, "%m.%d")
+#Convert factors to characters
+
+#Omit NAs
+mydata <- na.omit(mydata)
+mydata$Circulation..Unique.Visitors <- as.numeric(mydata$Circulation..Unique.Visitors)
+mydata$Circulation..Potential.Viewership <- as.numeric(mydata$Circulation..Potential.Viewership)
+mydata$Date <- as.numeric(mydata$Date)
+
+axis_vars <- c(
+  "Circulation Unique Visitors" = mydata$Circulation..Unique.Visitors,
+  "Circulation Potential Viewership" = mydata$Circulation..Potential.Viewership,
+  "Date" = mydata$Date
+)
+
+shinyServer(function(input, output, session) {
+  
+  # Filter the publications, returning a data frame
+  pubs <- reactive({
+    # Due to dplyr issue #318, we need temp variables for input values
+    minunique.v <- input$circulation..unique.visitors [1] * 1e8
+    maxunique.v <- input$circulation..unique.visitors [2] * 1e8
+    minp.viewership <- input$circulation..potential.viewership [1] * 1e8
+    maxp.viewership <- input$circulation..potential.viewership [2] * 1e8
+    
+    
+    # Apply filters
+    m <- mydata %>% 
+      
+      filter(
+        
+        Circulation..Unique.Visitors >= minunique.v,
+        Circulation..Unique.Visitors <= maxunique.v,
+        Circulation..Potential.Viewership >= minp.viewership,
+        Circulation..Potential.Viewership >= maxp.viewership
+        
+      ) %>%
+      arrange(Circulation..Potential.Viewership)
+    # Apply filters
+    m <- mydata %>%
+      filter(
+        Circulation..Unique.Visitors >= unique.v,
+        Circulation..Potential.Viewership >= p.viewership,
+        Date >= date
+      ) %>%
+      arrange(Date)
+    
+    # Optional: filter by keywords
+    if (input$keywords != "All") {
+      keywords <- paste0("%", input$keywords, "%")
+      m <- m %>% filter(Keywords %like% keywords)
+    }
+    # Optional: filter by headline
+    if (!is.null(input$headline) && input$headline != "") {
+      headline <- paste0("%", input$headline, "%")
+      m <- m %>% filter(Headline %like% headline)
+    }
+    # Optional: filter by hitsentence
+    if (!is.null(input$hitsentence) && input$hitsentence != "") {
+      hitsentence <- paste0("%", input$hitsentence, "%")
+      m <- m %>% filter(Hitsentence %like% hitsentence)
+    }
+    m <- as.data.frame(m)
+    
+    # Add column which says whether the publication is from abroad 
+    m$out_us <- character(nrow(m))
+    m$out_us[m$Country == "United States"] <- "No"
+    m$out_us[!m$Country == "United States"] <- "Yes"
+    
+    m
+  })
+  
+  # Function for generating tooltip text
+  pub_tooltip <- function(x) {
+    if (is.null(x)) return(NULL)
+    if (is.null(x$Outlet.Publication)) return(NULL)
+    
+    all_pubs <- isolate(pubs())
+    pub <- all_pubs[all_pubs$Outlet.Publication == x$Outlet.Publication, ]
+    
+    paste0("<b>", pub$Outlet.Publication, "</b><br>",
+           pub$Date, "<br>",
+           format(pub$Circulation..Potential.Viewership, big.mark = ",", scientific = FALSE)
+    )
+  }
+  # A reactive expression with the ggvis plot
+  vis <- reactive({
+    # Lables for axes
+    xvar_name <- names(axis_vars)[axis_vars == input$xvar]
+    yvar_name <- names(axis_vars)[axis_vars == input$yvar]
+    
+    # Normally we could do something like props(x = ~BoxOffice, y = ~Reviews),
+    # but since the inputs are strings, we need to do a little more work.
+    xvar <- prop("x", as.symbol(input$xvar))
+    yvar <- prop("y", as.symbol(input$yvar))
+    
+    pubs %>%
+      ggvis(x = xvar, y = yvar) %>%
+      layer_points(size := 50, size.hover := 200,
+                   fillOpacity := 0.2, fillOpacity.hover := 0.5,
+                   stroke = ~out_us, key := ~Outlet.Publication) %>%
+      add_tooltip(movie_tooltip, "hover") %>%
+      add_axis("x", title = xvar_name) %>%
+      add_axis("y", title = yvar_name) %>%
+      add_legend("stroke", title = "Outside USA", values = c("Yes", "No")) %>%
+      scale_nominal("stroke", domain = c("Yes", "No"),
+                    range = c("orange", "#aaa")) %>%
+      set_options(width = 500, height = 500)
+  })
+  
+  vis %>% bind_shiny("plot1")
+  
+  output$n_movies <- renderText({ nrow(movies()) })
+})
