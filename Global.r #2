@@ -1,0 +1,5 @@
+axis_vars <- c(
+  "Circulation Unique Visitors" = "Circulation..Unique.Visitors",
+  "Circulation Potential Viewership" = "Circulation..Potential.Viewership",
+  "Date" = "Date"
+)
