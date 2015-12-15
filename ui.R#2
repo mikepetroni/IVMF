@@ -1,0 +1,46 @@
+library(ggvis)
+
+# For dropdown menu
+actionLink <- function(inputId, ...) {
+  tags$a(href='javascript:void',
+         id=inputId,
+         class='action-button',
+         ...)
+}
+
+shinyUI(fluidPage(
+  titlePanel("Communcations Report"),
+  fluidRow(
+    column(3,
+           wellPanel(
+             h4("Filter"),
+             sliderInput("unique.v", "Minimum Number Unique Visitors",
+                         1, 100000000, 1000000, step = 1),
+             sliderInput("p.viewership", "Minimum Size of Potential Viewership",
+                         1, 100000000, 1000000, step = 1),
+             selectInput("keywords", "Keyword (a publication can hit multiple keywords)",
+                         c("All", "Boots to Business", "Entrepreneurship Bootcamp for Veterans with Disabilities", 
+                           "Onward to Opportunity", "Biography", "Comedy",
+                           "Veteran Women Igniting the Spirit of Entrepreneurship", "IVMF")
+             ),  
+             textInput("headline", "Headline of Publication Contains"),
+             textInput("hitsentence", "Hit Sentence Contains")
+           ),
+           wellPanel(
+             selectInput("xvar", "X-axis variable", axis_vars, selected = "Circulation..Unique.Visitors"),
+             selectInput("yvar", "Y-axis variable", axis_vars, selected = "Circulation..Potential.Viewership"),
+             tags$small(paste0(
+               "Note: Unique hits refers to _____ and potential viewership refers to _____"
+             ))
+           )
+    ),
+    column(9,
+           ggvisOutput("plot1"),
+           wellPanel(
+             span("Number of publications selected:",
+                  textOutput("n_publications")
+             )
+           )
+    )
+  )
+))
