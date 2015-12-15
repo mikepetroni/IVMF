@@ -1,0 +1,84 @@
+library(ggvis)
+library(dplyr)
+
+
+#Importdata
+mydata <- `IVMF.Sep,Oct,Nov`
+mydata <- inner_join(mydata, mydata, 
+  c("Outlet.Publication", "Country", "Circulation..Unique.Visitors", 
+    "Circulation..Potential.Viewership", "Date", "Headline", "Opening.text", 
+    "Hit.sentence", "Keywords")) %>%
+  select(Outlet.Publication, Circulation..Potential.Viewership, Country, Date, 
+         Hit.sentence, Circulation..Unique.Visitors, Headline, Keywords)
+#convert dates
+mydata$Date <- as.Date(mydata$Date, "%m/%d/%Y")
+mydata$Date <- format(mydata$Date, "20%y/%m/%d")
+#Omit NAs
+mydata <- na.omit(mydata)
+mydata <- mydata(as.numeric(mydata$Circulation..Potential.Viewership), 
+                 as.numeric(mydata$Circulation..Unique.Visitors),)
+shinyServer(function(input, output, session) {
+
+  # Filter the publications, returning a data frame
+  pubs <- reactive({
+    # Due to dplyr issue #318, we need temp variables for input values
+    unique.v <- input$circulation..unique.visitors
+    p.viewership <- input$circulation..potential.viewership
+    date <- input$date
+    country <- input$country
+    keywords <- input$keywords
+    hit.sentence <- input$hit.sentence
+    headline <- input$headline
+    
+    
+    # Apply filters
+    m <- mydata %>%
+      filter(
+        Circulation..Unique.Visitors >= unique.v,
+        Circulation..Potential.Viewership >= p.viewership,
+        Date >= Date
+      ) %>%
+      arrange(date)
+      # Optional: filter by keywords
+      if (input$keywords != "All") {
+        keywords <- paste0("%", input$keywords, "%")
+        m <- m %>% filter(Keywords %like% keywords)
+      }
+    # Optional: filter by headline
+    if (!is.null(input$headline) && input$headline != "") {
+      headline <- paste0("%", input$headline, "%")
+      m <- m %>% filter(Headline %like% headline)
+    }
+    # Optional: filter by hitsentence
+    if (!is.null(input$hitsentence) && input$hitsentence != "") {
+      hitsentence <- paste0("%", input$hitsentence, "%")
+      m <- m %>% filter(Hitsentence %like% hitsentence)
+    }
+    
+    m <- as.data.frame(m)
+    m
+  })
+    # A reactive expression with the ggvis plot
+    vis <- reactive({
+      # Lables for axes
+      xvar_name <- names(axis_vars)[axis_vars == input$xvar]
+      yvar_name <- names(axis_vars)[axis_vars == input$yvar]
+      
+      # Normally we could do something like props(x = ~BoxOffice, y = ~Reviews),
+      # but since the inputs are strings, we need to do a little more work.
+      xvar <- prop("x", as.symbol(input$xvar))
+      yvar <- prop("y", as.symbol(input$yvar))
+      
+      pubs %>%
+        ggvis(x = xvar, y = yvar) %>%
+        layer_points(size := 50, size.hover := 200,
+        fillOpacity := 0.2, fillOpacity.hover := 0.5) %>%
+        add_axis("x", title = xvar_name) %>%
+        add_axis("y", title = yvar_name) %>%
+        set_options(width = 500, height = 500)
+    })
+    
+    vis %>% bind_shiny("plot1")
+    
+    output$n_publications <- renderText({ nrow(pubs()) })
+  })
